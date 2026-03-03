@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>기능성 화장품 보고 현황 대시보드</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PapaParse for CSV parsing (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- jQuery & DataTables for Table (CDN) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* 커스텀 스타일 및 DataTables UI 개선 */
+        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .dataTables_wrapper .dataTables_filter input { border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.25rem 0.5rem; margin-left: 0.5rem; }
+        .dataTables_wrapper .dataTables_length select { border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.25rem; }
+        table.dataTable.no-footer { border-bottom: 1px solid #e5e7eb; }
+        table.dataTable thead th { border-bottom: 2px solid #e5e7eb; background-color: #f9fafb; color: #374151; font-weight: 600; padding: 12px 10px; }
+        table.dataTable tbody td { border-bottom: 1px solid #e5e7eb; padding: 12px 10px; color: #4b5563; }
+        .chart-container { position: relative; height: 350px; width: 100%; }
+        
+        /* 로딩 스피너 애니메이션 */
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <!-- 로딩 화면 -->
+    <div id="loadingScreen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+        <div class="loader mb-4"></div>
+        <p class="text-gray-600 font-medium">데이터를 불러오고 분석하는 중입니다...</p>
+    </div>
+
+    <!-- 대시보드 컨테이너 -->
+    <div id="dashboard" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- 헤더 영역 -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">기능성 화장품 보고 현황 대시보드</h1>
+                <p class="text-gray-500 mt-1" id="lastUpdated">데이터를 실시간으로 가져옵니다.</p>
+            </div>
+            <div class="mt-4 md:mt-0">
+                <button onclick="location.reload()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition flex items-center gap-2 font-medium">
+                    <i class="fas fa-sync-alt"></i> 데이터 새로고침
+                </button>
+            </div>
+        </header>
+
+        <!-- KPI 요약 지표 영역 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- 전체 보고 건수 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
+                <div class="p-4 rounded-full bg-blue-50 text-blue-600 mr-4">
+                    <i class="fas fa-file-alt text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500 mb-1">전체 보고 건수</p>
+                    <h3 class="text-2xl font-bold text-gray-900" id="kpiTotalCount">0<span class="text-sm font-normal text-gray-500 ml-1">건</span></h3>
+                </div>
+            </div>
+            
+            <!-- 보고 참여 업체 수 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
+                <div class="p-4 rounded-full bg-indigo-50 text-indigo-600 mr-4">
+                    <i class="fas fa-building text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500 mb-1">보고 참여 업체 수</p>
+                    <h3 class="text-2xl font-bold text-gray-900" id="kpiCompanyCount">0<span class="text-sm font-normal text-gray-500 ml-1">개사</span></h3>
+                </div>
+            </div>
+
+            <!-- 미백 기능성 비중 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
+                <div class="p-4 rounded-full bg-emerald-50 text-emerald-600 mr-4">
+                    <i class="fas fa-sparkles text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500 mb-1">미백 기능성 포함 비중</p>
+                    <h3 class="text-2xl font-bold text-gray-900" id="kpiWhiteningRatio">0<span class="text-sm font-normal text-gray-500 ml-1">%</span></h3>
+                </div>
+            </div>
+
+            <!-- 주름개선 기능성 비중 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
+                <div class="p-4 rounded-full bg-rose-50 text-rose-600 mr-4">
+                    <i class="fas fa-leaf text-2xl"></i>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-gray-500 mb-1">주름개선 포함 비중</p>
+                    <h3 class="text-2xl font-bold text-gray-900" id="kpiWrinkleRatio">0<span class="text-sm font-normal text-gray-500 ml-1">%</span></h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- 시각화 차트 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- 효능별 분포 파이 차트 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 col-span-1">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">기능성 효능별 분포</h3>
+                <div class="chart-container flex justify-center items-center">
+                    <canvas id="efficacyChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 주요 업체 현황 가로 막대 차트 -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">최다 보고 상위 10개 업체 현황</h3>
+                <div class="chart-container">
+                    <canvas id="companyChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상세 데이터 테이블 영역 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">상세 보고 목록</h3>
+            <div class="overflow-x-auto text-sm">
+                <table id="dataTable" class="w-full text-left border-collapse" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>보고일자</th>
+                            <th>품목명</th>
+                            <th>업소명</th>
+                            <th>효능효과명</th>
+                            <th>SPF</th>
+                            <th>PA</th>
+                            <th>미백</th>
+                            <th>주름</th>
+                            <th>자외선</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 데이터가 동적으로 삽입됩니다 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- 푸터 -->
+        <footer class="text-center text-gray-500 text-sm py-4">
+            &copy; 2026 기능성 화장품 보고 현황 대시보드. All rights reserved.
+        </footer>
+    </div>
+
+    <!-- JavaScript 로직 -->
+    <script>
+        // CSV 데이터 URL
+        const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR1k3SnoGrUswT76H9F3nyY2T4Bo4hcfY9etZePLnAM6T2GbBAtrMnmOf46xfaH_ZNS9DC9tuXTRWz6/pub?gid=436907159&single=true&output=csv';
+
+        // 페이지 로드 완료 시 데이터 가져오기 실행
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+        });
+
+        function fetchData() {
+            Papa.parse(csvUrl, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const rawData = results.data;
+                    processData(rawData);
+                },
+                error: function(err) {
+                    console.error("CSV 파싱 오류:", err);
+                    alert("데이터를 불러오는 중 오류가 발생했습니다. URL을 확인해주세요.");
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                }
+            });
+        }
+
+        // CSV 헤더 공백 등 변동성을 처리하기 위한 헬퍼 함수
+        function getColValue(row, colName) {
+            for (let key in row) {
+                if (key.trim() === colName) {
+                    return row[key];
+                }
+            }
+            return '';
+        }
+
+        // 데이터가 "Y", "포함", "1" 등 유의미한 값을 갖는지 확인하는 헬퍼 함수
+        function hasEfficacy(val) {
+            if (!val) return false;
+            const str = String(val).trim().toUpperCase();
+            return str !== '' && str !== 'N' && str !== '0' && str !== 'FALSE' && str !== 'X';
+        }
+
+        function processData(data) {
+            // 1. 초기 변수 설정
+            let validData = [];
+            let totalCount = 0;
+            let companies = new Set();
+            
+            let whiteningCount = 0;
+            let wrinkleCount = 0;
+            let uvCount = 0;
+            
+            let companyFrequency = {};
+
+            // 2. 데이터 순회하며 계산 및 정제
+            data.forEach(row => {
+                const reportDate = getColValue(row, '보고일자');
+                const productName = getColValue(row, '품목명');
+                const companyName = getColValue(row, '업소명');
+                
+                // 필수 데이터가 없는 행은 건너뛰기
+                if (!productName || !companyName) return;
+
+                const efficacyName = getColValue(row, '효능효과명');
+                const spf = getColValue(row, 'SPF');
+                const pa = getColValue(row, 'PA');
+                const whitening = getColValue(row, '미백');
+                const wrinkle = getColValue(row, '주름');
+                const uv = getColValue(row, '자외선');
+
+                // 테이블용 데이터 푸시 (제조원 제외)
+                validData.push([
+                    reportDate,
+                    productName,
+                    companyName,
+                    efficacyName,
+                    spf,
+                    pa,
+                    whitening,
+                    wrinkle,
+                    uv
+                ]);
+
+                // 지표 집계
+                totalCount++;
+                companies.add(companyName);
+                
+                if (companyName) {
+                    companyFrequency[companyName] = (companyFrequency[companyName] || 0) + 1;
+                }
+
+                if (hasEfficacy(whitening)) whiteningCount++;
+                if (hasEfficacy(wrinkle)) wrinkleCount++;
+                if (hasEfficacy(uv)) uvCount++;
+            });
+
+            // 3. UI 업데이트
+            updateKPIs(totalCount, companies.size, whiteningCount, wrinkleCount);
+            renderCharts(whiteningCount, wrinkleCount, uvCount, companyFrequency);
+            renderTable(validData);
+
+            // 4. 로딩 화면 숨기고 대시보드 표시
+            document.getElementById('loadingScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            
+            // 날짜 업데이트
+            const today = new Date();
+            document.getElementById('lastUpdated').innerText = `데이터 기준일: ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+        }
+
+        function updateKPIs(total, companyCount, whitening, wrinkle) {
+            // 카운트 애니메이션 효과 (간단 구현)
+            document.getElementById('kpiTotalCount').innerHTML = `${total.toLocaleString()}<span class="text-sm font-normal text-gray-500 ml-1">건</span>`;
+            document.getElementById('kpiCompanyCount').innerHTML = `${companyCount.toLocaleString()}<span class="text-sm font-normal text-gray-500 ml-1">개사</span>`;
+            
+            const whiteRatio = total > 0 ? ((whitening / total) * 100).toFixed(1) : 0;
+            const wrinkleRatio = total > 0 ? ((wrinkle / total) * 100).toFixed(1) : 0;
+            
+            document.getElementById('kpiWhiteningRatio').innerHTML = `${whiteRatio}<span class="text-sm font-normal text-gray-500 ml-1">%</span>`;
+            document.getElementById('kpiWrinkleRatio').innerHTML = `${wrinkleRatio}<span class="text-sm font-normal text-gray-500 ml-1">%</span>`;
+        }
+
+        function renderCharts(whitening, wrinkle, uv, companyMap) {
+            Chart.defaults.font.family = "'Pretendard', sans-serif";
+            Chart.defaults.color = "#4b5563";
+
+            // [차트 1] 효능별 파이 차트
+            const ctxEfficacy = document.getElementById('efficacyChart').getContext('2d');
+            new Chart(ctxEfficacy, {
+                type: 'doughnut',
+                data: {
+                    labels: ['미백', '주름개선', '자외선차단'],
+                    datasets: [{
+                        data: [whitening, wrinkle, uv],
+                        backgroundColor: [
+                            'rgba(16, 185, 129, 0.8)', // Emerald
+                            'rgba(244, 63, 94, 0.8)',  // Rose
+                            'rgba(245, 158, 11, 0.8)'  // Amber
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) label += ': ';
+                                    label += context.raw + '건';
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                }
+            });
+
+            // [차트 2] 상위 업체 가로 막대 차트
+            // 데이터 정렬 및 상위 10개 추출
+            const sortedCompanies = Object.entries(companyMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            const companyLabels = sortedCompanies.map(item => item[0]);
+            const companyData = sortedCompanies.map(item => item[1]);
+
+            const ctxCompany = document.getElementById('companyChart').getContext('2d');
+            new Chart(ctxCompany, {
+                type: 'bar',
+                data: {
+                    labels: companyLabels,
+                    datasets: [{
+                        label: '보고 제품 수',
+                        data: companyData,
+                        backgroundColor: 'rgba(59, 130, 246, 0.8)', // Blue
+                        borderRadius: 4,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // 가로 막대
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { borderDash: [2, 4], color: '#e5e7eb' }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    // 텍스트가 너무 길면 자르기
+                                    let label = this.getLabelForValue(value);
+                                    return label.length > 15 ? label.substr(0, 15) + '...' : label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderTable(dataSet) {
+            // DataTables 초기화
+            $('#dataTable').DataTable({
+                data: dataSet,
+                language: {
+                    "decimal": "",
+                    "emptyTable": "데이터가 없습니다.",
+                    "info": "전체 _TOTAL_건 중 _START_ ~ _END_건 표시",
+                    "infoEmpty": "표시할 데이터가 없습니다.",
+                    "infoFiltered": "(_MAX_건의 데이터에서 필터링됨)",
+                    "lengthMenu": "_MENU_ 개씩 보기",
+                    "search": "검색:",
+                    "zeroRecords": "검색 결과가 없습니다.",
+                    "paginate": {
+                        "first": "처음",
+                        "last": "마지막",
+                        "next": "다음",
+                        "previous": "이전"
+                    }
+                },
+                pageLength: 10,
+                order: [[0, "desc"]], // 기본 정렬: 보고일자 최신순
+                columnDefs: [
+                    { targets: [4, 5, 6, 7, 8], className: 'text-center' } // 수치 및 O/X 열 가운데 정렬
+                ]
+            });
+        }
+    </script>
+</body>
+</html>
