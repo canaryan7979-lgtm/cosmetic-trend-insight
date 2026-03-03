@@ -157,11 +157,12 @@
                 </div>
             </div>
 
-            <!-- 주요 업체 현황 가로 막대 차트 -->
+            <!-- 주요 업체 현황 (HTML 기반 프로그레스 리스트 차트) -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
                 <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">최다 보고 상위 10개 업체 현황</h3>
-                <div class="chart-container">
-                    <canvas id="companyChart"></canvas>
+                <!-- 모바일에서도 스크롤 가능하며 찌그러지지 않는 구조 -->
+                <div id="companyListContainer" class="flex flex-col gap-4 overflow-y-auto max-h-[350px] pr-2">
+                    <!-- 데이터가 동적으로 삽입됩니다 -->
                 </div>
             </div>
         </div>
@@ -207,7 +208,6 @@
         let globalRawData = [];
         let dataTableInstance = null;
         let efficacyChartInstance = null;
-        let companyChartInstance = null;
 
         // 페이지 로드 완료 시 데이터 가져오기 실행
         document.addEventListener('DOMContentLoaded', () => {
@@ -408,9 +408,8 @@
             Chart.defaults.font.family = "'Pretendard', sans-serif";
             Chart.defaults.color = "#4b5563";
 
-            // 기존 차트 파괴 (업데이트 시 중복 생성 방지)
+            // 기존 파이 차트 파괴 (업데이트 시 중복 생성 방지)
             if (efficacyChartInstance) efficacyChartInstance.destroy();
-            if (companyChartInstance) companyChartInstance.destroy();
 
             // [차트 1] 효능별 파이 차트
             const ctxEfficacy = document.getElementById('efficacyChart').getContext('2d');
@@ -449,53 +448,47 @@
                 }
             });
 
-            // [차트 2] 상위 업체 가로 막대 차트
-            // 데이터 정렬 및 상위 10개 추출
+            // [차트 2] 상위 업체 가로 막대 차트 (HTML & CSS 프로그레스 바로 변경)
             const sortedCompanies = Object.entries(companyMap)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 10);
             
-            const companyLabels = sortedCompanies.map(item => item[0]);
-            const companyData = sortedCompanies.map(item => item[1]);
+            const companyListContainer = document.getElementById('companyListContainer');
+            companyListContainer.innerHTML = ''; // 기존 리스트 초기화
 
-            const ctxCompany = document.getElementById('companyChart').getContext('2d');
-            companyChartInstance = new Chart(ctxCompany, {
-                type: 'bar',
-                data: {
-                    labels: companyLabels,
-                    datasets: [{
-                        label: '보고 제품 수',
-                        data: companyData,
-                        backgroundColor: 'rgba(59, 130, 246, 0.8)', // Blue
-                        borderRadius: 4,
-                        barPercentage: 0.6
-                    }]
-                },
-                options: {
-                    indexAxis: 'y', // 가로 막대
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        x: {
-                            beginAtZero: true,
-                            grid: { borderDash: [2, 4], color: '#e5e7eb' }
-                        },
-                        y: {
-                            grid: { display: false },
-                            ticks: {
-                                callback: function(value, index, values) {
-                                    // 텍스트가 너무 길면 자르기
-                                    let label = this.getLabelForValue(value);
-                                    return label.length > 15 ? label.substr(0, 15) + '...' : label;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+            if (sortedCompanies.length === 0) {
+                companyListContainer.innerHTML = '<p class="text-gray-500 text-sm py-4">해당 조건의 데이터가 없습니다.</p>';
+            } else {
+                const maxCount = sortedCompanies[0][1]; // 1위 업체의 건수를 100% 기준으로 삼음
+
+                sortedCompanies.forEach((item, index) => {
+                    const companyName = item[0];
+                    const count = item[1];
+                    const percent = (count / maxCount) * 100;
+
+                    // 순위별 뱃지 색상 다르게 설정 (1위 금, 2위 은, 3위 동)
+                    let badgeClass = "bg-gray-100 text-gray-500 font-medium";
+                    if (index === 0) badgeClass = "bg-yellow-100 text-yellow-700 font-bold";
+                    else if (index === 1) badgeClass = "bg-slate-200 text-slate-700 font-bold";
+                    else if (index === 2) badgeClass = "bg-orange-100 text-orange-800 font-bold";
+
+                    const listItemHtml = `
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-end text-sm">
+                                <div class="flex items-center gap-2 overflow-hidden pr-2">
+                                    <span class="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full text-xs ${badgeClass}">${index + 1}</span>
+                                    <span class="font-medium text-gray-800 truncate" title="${companyName}">${companyName}</span>
+                                </div>
+                                <span class="font-bold text-gray-700 whitespace-nowrap">${count.toLocaleString()}건</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-2.5">
+                                <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-700 ease-out" style="width: ${percent}%"></div>
+                            </div>
+                        </div>
+                    `;
+                    companyListContainer.insertAdjacentHTML('beforeend', listItemHtml);
+                });
+            }
         }
 
         function renderTable(dataSet) {
