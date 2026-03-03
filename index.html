@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>기능성 화장품 보고 현황 대시보드</title>
+    <title>기능성 화장품 보고 현황 대시보드 (최근 6개월)</title>
     
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -19,6 +19,10 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     
+    <!-- DataTables Responsive Extension -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
+    <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+    
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -29,7 +33,19 @@
         .dataTables_wrapper .dataTables_length select { border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.25rem; }
         table.dataTable.no-footer { border-bottom: 1px solid #e5e7eb; }
         table.dataTable thead th { border-bottom: 2px solid #e5e7eb; background-color: #f9fafb; color: #374151; font-weight: 600; padding: 12px 10px; }
-        table.dataTable tbody td { border-bottom: 1px solid #e5e7eb; padding: 12px 10px; color: #4b5563; }
+        table.dataTable tbody td { border-bottom: 1px solid #e5e7eb; padding: 12px 10px; color: #4b5563; transition: background-color 0.2s; }
+        
+        /* 테이블 줄무늬 (Zebra Striping) 및 마우스 오버 (Hover) 효과 */
+        table.dataTable tbody tr:nth-child(odd) { background-color: #ffffff; }
+        table.dataTable tbody tr:nth-child(even) { background-color: #f8fafc; } /* Tailwind slate-50 */
+        table.dataTable tbody tr:hover td { background-color: #f1f5f9 !important; } /* Tailwind slate-100 */
+
+        /* 2개 이상 기능성(미백, 주름, 자외선) 충족 시 강조 스타일 */
+        table.dataTable tbody tr.highlight-multi-efficacy td { 
+            color: #ef4444 !important; /* Tailwind red-500 */
+            font-weight: 600; 
+        }
+
         .chart-container { position: relative; height: 350px; width: 100%; }
         
         /* 로딩 스피너 애니메이션 */
@@ -51,7 +67,7 @@
         <!-- 헤더 영역 -->
         <header class="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900">기능성 화장품 보고 현황 대시보드</h1>
+                <h1 class="text-3xl font-bold text-gray-900">기능성 화장품 보고 현황 대시보드 <span class="text-xl text-blue-600 font-medium ml-2">(최근 6개월)</span></h1>
                 <p class="text-gray-500 mt-1" id="lastUpdated">데이터를 실시간으로 가져옵니다.</p>
             </div>
             <div class="mt-4 md:mt-0">
@@ -61,12 +77,35 @@
             </div>
         </header>
 
+        <!-- 필터 영역 추가 (반응형: 모바일에서 세로로 쌓임) -->
+        <div class="mb-6 flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <!-- 업체명 필터 -->
+            <div class="flex-1 flex flex-col sm:flex-row sm:items-center">
+                <label for="companyFilter" class="block text-sm font-medium text-gray-700 mb-2 sm:mb-0 sm:mr-4 whitespace-nowrap">
+                    <i class="fas fa-building text-blue-500 mr-1"></i> 업체명 필터:
+                </label>
+                <select id="companyFilter" onchange="applyFilter()" class="block w-full sm:flex-1 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md border">
+                    <option value="all">전체 업체</option>
+                </select>
+            </div>
+
+            <!-- 효능효과 필터 -->
+            <div class="flex-1 flex flex-col sm:flex-row sm:items-center">
+                <label for="efficacyFilter" class="block text-sm font-medium text-gray-700 mb-2 sm:mb-0 sm:mr-4 whitespace-nowrap">
+                    <i class="fas fa-sparkles text-emerald-500 mr-1"></i> 효능효과 필터:
+                </label>
+                <select id="efficacyFilter" onchange="applyFilter()" class="block w-full sm:flex-1 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md border">
+                    <option value="all">전체 효능효과</option>
+                </select>
+            </div>
+        </div>
+
         <!-- KPI 요약 지표 영역 -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <!-- 전체 보고 건수 -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-                <div class="p-4 rounded-full bg-blue-50 text-blue-600 mr-4">
-                    <i class="fas fa-file-alt text-2xl"></i>
+                <div class="flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 mr-4 text-2xl">
+                    📋
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500 mb-1">전체 보고 건수</p>
@@ -76,8 +115,8 @@
             
             <!-- 보고 참여 업체 수 -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-                <div class="p-4 rounded-full bg-indigo-50 text-indigo-600 mr-4">
-                    <i class="fas fa-building text-2xl"></i>
+                <div class="flex items-center justify-center w-14 h-14 rounded-full bg-indigo-50 mr-4 text-2xl">
+                    🏢
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500 mb-1">보고 참여 업체 수</p>
@@ -87,8 +126,8 @@
 
             <!-- 미백 기능성 비중 -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-                <div class="p-4 rounded-full bg-emerald-50 text-emerald-600 mr-4">
-                    <i class="fas fa-sparkles text-2xl"></i>
+                <div class="flex items-center justify-center w-14 h-14 rounded-full bg-emerald-50 mr-4 text-2xl">
+                    ✨
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500 mb-1">미백 기능성 포함 비중</p>
@@ -98,8 +137,8 @@
 
             <!-- 주름개선 기능성 비중 -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center">
-                <div class="p-4 rounded-full bg-rose-50 text-rose-600 mr-4">
-                    <i class="fas fa-leaf text-2xl"></i>
+                <div class="flex items-center justify-center w-14 h-14 rounded-full bg-rose-50 mr-4 text-2xl">
+                    🌿
                 </div>
                 <div>
                     <p class="text-sm font-medium text-gray-500 mb-1">주름개선 포함 비중</p>
@@ -130,13 +169,14 @@
         <!-- 상세 데이터 테이블 영역 -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
             <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">상세 보고 목록</h3>
-            <div class="overflow-x-auto text-sm">
-                <table id="dataTable" class="w-full text-left border-collapse" style="width:100%">
+            <div class="w-full text-sm">
+                <!-- 반응형을 위해 width:100%와 display 속성 최적화, overflow-x-auto는 DataTables Responsive가 처리하므로 제외 -->
+                <table id="dataTable" class="w-full text-left border-collapse display responsive nowrap" style="width:100%">
                     <thead>
                         <tr>
                             <th>보고일자</th>
                             <th>품목명</th>
-                            <th>업소명</th>
+                            <th>업체명</th>
                             <th>효능효과명</th>
                             <th>SPF</th>
                             <th>PA</th>
@@ -162,6 +202,12 @@
     <script>
         // CSV 데이터 URL
         const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR1k3SnoGrUswT76H9F3nyY2T4Bo4hcfY9etZePLnAM6T2GbBAtrMnmOf46xfaH_ZNS9DC9tuXTRWz6/pub?gid=436907159&single=true&output=csv';
+
+        // 전역 변수 설정 (필터링 및 차트 업데이트용)
+        let globalRawData = [];
+        let dataTableInstance = null;
+        let efficacyChartInstance = null;
+        let companyChartInstance = null;
 
         // 페이지 로드 완료 시 데이터 가져오기 실행
         document.addEventListener('DOMContentLoaded', () => {
@@ -203,6 +249,104 @@
         }
 
         function processData(data) {
+            // 유효한 데이터만 필터링하여 전역 변수에 저장
+            globalRawData = data.filter(row => getColValue(row, '품목명') && getColValue(row, '업소명'));
+            
+            // 드롭다운 필터 초기화
+            populateCompanyFilter(globalRawData);
+            populateEfficacyFilter(globalRawData);
+            
+            // 대시보드 데이터 업데이트
+            updateDashboard(globalRawData);
+
+            // 로딩 화면 숨기고 대시보드 표시
+            document.getElementById('loadingScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            
+            // 날짜 업데이트
+            const today = new Date();
+            document.getElementById('lastUpdated').innerText = `데이터 기준일: ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+        }
+
+        // 업체명 필터 드롭다운 채우기
+        function populateCompanyFilter(data) {
+            const companyCounts = {};
+            
+            // 업체별 보고 건수 집계 (CSV 원본 헤더인 '업소명'은 유지)
+            data.forEach(row => {
+                const company = getColValue(row, '업소명');
+                if (company) {
+                    companyCounts[company] = (companyCounts[company] || 0) + 1;
+                }
+            });
+            
+            // 업체명을 가나다순으로 정렬
+            const sortedCompanies = Object.keys(companyCounts).sort();
+            
+            const filter = document.getElementById('companyFilter');
+            
+            // 기존 옵션 초기화 (중복 추가 방지)
+            filter.innerHTML = '<option value="all">전체 업체</option>';
+            
+            sortedCompanies.forEach(company => {
+                const option = document.createElement('option');
+                option.value = company;
+                // 표시 텍스트에 "업체명 (건수)" 적용
+                option.textContent = `${company} (${companyCounts[company]}건)`;
+                filter.appendChild(option);
+            });
+        }
+
+        // 효능효과 필터 드롭다운 채우기
+        function populateEfficacyFilter(data) {
+            const efficacyCounts = {};
+            
+            // 효능효과별 보고 건수 집계
+            data.forEach(row => {
+                const efficacy = getColValue(row, '효능효과명');
+                if (efficacy) {
+                    efficacyCounts[efficacy] = (efficacyCounts[efficacy] || 0) + 1;
+                }
+            });
+            
+            // 효능효과명을 가나다순으로 정렬
+            const sortedEfficacies = Object.keys(efficacyCounts).sort();
+            
+            const filter = document.getElementById('efficacyFilter');
+            
+            // 기존 옵션 초기화
+            filter.innerHTML = '<option value="all">전체 효능효과</option>';
+            
+            sortedEfficacies.forEach(efficacy => {
+                const option = document.createElement('option');
+                option.value = efficacy;
+                option.textContent = `${efficacy} (${efficacyCounts[efficacy]}건)`;
+                filter.appendChild(option);
+            });
+        }
+
+        // 필터 변경 시 호출되는 함수
+        function applyFilter() {
+            const selectedCompany = document.getElementById('companyFilter').value;
+            const selectedEfficacy = document.getElementById('efficacyFilter').value;
+            
+            let filteredData = globalRawData;
+            
+            // 1. 업체명 필터 적용
+            if (selectedCompany !== 'all') {
+                filteredData = filteredData.filter(row => getColValue(row, '업소명') === selectedCompany);
+            }
+            
+            // 2. 효능효과 필터 적용
+            if (selectedEfficacy !== 'all') {
+                filteredData = filteredData.filter(row => getColValue(row, '효능효과명') === selectedEfficacy);
+            }
+            
+            updateDashboard(filteredData);
+        }
+
+        // 대시보드 데이터 및 UI 갱신 (공통 로직)
+        function updateDashboard(data) {
             // 1. 초기 변수 설정
             let validData = [];
             let totalCount = 0;
@@ -219,10 +363,6 @@
                 const reportDate = getColValue(row, '보고일자');
                 const productName = getColValue(row, '품목명');
                 const companyName = getColValue(row, '업소명');
-                
-                // 필수 데이터가 없는 행은 건너뛰기
-                if (!productName || !companyName) return;
-
                 const efficacyName = getColValue(row, '효능효과명');
                 const spf = getColValue(row, 'SPF');
                 const pa = getColValue(row, 'PA');
@@ -230,18 +370,8 @@
                 const wrinkle = getColValue(row, '주름');
                 const uv = getColValue(row, '자외선');
 
-                // 테이블용 데이터 푸시 (제조원 제외)
-                validData.push([
-                    reportDate,
-                    productName,
-                    companyName,
-                    efficacyName,
-                    spf,
-                    pa,
-                    whitening,
-                    wrinkle,
-                    uv
-                ]);
+                // 테이블용 데이터 푸시
+                validData.push([reportDate, productName, companyName, efficacyName, spf, pa, whitening, wrinkle, uv]);
 
                 // 지표 집계
                 totalCount++;
@@ -260,14 +390,6 @@
             updateKPIs(totalCount, companies.size, whiteningCount, wrinkleCount);
             renderCharts(whiteningCount, wrinkleCount, uvCount, companyFrequency);
             renderTable(validData);
-
-            // 4. 로딩 화면 숨기고 대시보드 표시
-            document.getElementById('loadingScreen').classList.add('hidden');
-            document.getElementById('dashboard').classList.remove('hidden');
-            
-            // 날짜 업데이트
-            const today = new Date();
-            document.getElementById('lastUpdated').innerText = `데이터 기준일: ${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
         }
 
         function updateKPIs(total, companyCount, whitening, wrinkle) {
@@ -286,9 +408,13 @@
             Chart.defaults.font.family = "'Pretendard', sans-serif";
             Chart.defaults.color = "#4b5563";
 
+            // 기존 차트 파괴 (업데이트 시 중복 생성 방지)
+            if (efficacyChartInstance) efficacyChartInstance.destroy();
+            if (companyChartInstance) companyChartInstance.destroy();
+
             // [차트 1] 효능별 파이 차트
             const ctxEfficacy = document.getElementById('efficacyChart').getContext('2d');
-            new Chart(ctxEfficacy, {
+            efficacyChartInstance = new Chart(ctxEfficacy, {
                 type: 'doughnut',
                 data: {
                     labels: ['미백', '주름개선', '자외선차단'],
@@ -333,7 +459,7 @@
             const companyData = sortedCompanies.map(item => item[1]);
 
             const ctxCompany = document.getElementById('companyChart').getContext('2d');
-            new Chart(ctxCompany, {
+            companyChartInstance = new Chart(ctxCompany, {
                 type: 'bar',
                 data: {
                     labels: companyLabels,
@@ -373,9 +499,16 @@
         }
 
         function renderTable(dataSet) {
+            // DataTables가 이미 초기화되어 있다면 데이터만 갱신
+            if (dataTableInstance) {
+                dataTableInstance.clear().rows.add(dataSet).draw();
+                return;
+            }
+
             // DataTables 초기화
-            $('#dataTable').DataTable({
+            dataTableInstance = $('#dataTable').DataTable({
                 data: dataSet,
+                responsive: true, // 반응형 확장 활성화
                 language: {
                     "decimal": "",
                     "emptyTable": "데이터가 없습니다.",
@@ -396,7 +529,18 @@
                 order: [[0, "desc"]], // 기본 정렬: 보고일자 최신순
                 columnDefs: [
                     { targets: [4, 5, 6, 7, 8], className: 'text-center' } // 수치 및 O/X 열 가운데 정렬
-                ]
+                ],
+                // 행(Row) 생성 시 콜백 함수: 미백(6), 주름(7), 자외선(8) 중 2개 이상이면 CSS 클래스 추가
+                createdRow: function(row, data, dataIndex) {
+                    let efficacyCount = 0;
+                    if (hasEfficacy(data[6])) efficacyCount++;
+                    if (hasEfficacy(data[7])) efficacyCount++;
+                    if (hasEfficacy(data[8])) efficacyCount++;
+                    
+                    if (efficacyCount >= 2) {
+                        $(row).addClass('highlight-multi-efficacy');
+                    }
+                }
             });
         }
     </script>
